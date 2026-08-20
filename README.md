@@ -16,7 +16,14 @@ conda install yq
 conda install -c conda-forge jq
 ```
 
-### Running on a cluster using SLURM job manager
+### Usage
+
+Use the flag --config to specify the config file, config_default.yaml is used otherwise.
+
+Use the flags --step1, --step2, --step3, --step4 to specify the workflow steps to run; all steps are run if not specified.
+
+Example of running on a cluster using SLURM job manager:
+
 ```bash
 sbatch annotate_TIPs.slurm --config config_poly.yaml --step1 --step2
 ```
