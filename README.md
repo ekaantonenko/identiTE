@@ -25,5 +25,5 @@ Use the flags --step1, --step2, --step3, --step4 to specify the workflow steps t
 Example of running on a cluster using SLURM job manager:
 
 ```bash
-sbatch annotate_TIPs.slurm --config config_poly.yaml --step1 --step2
+sbatch annotate_TIPs.slurm --config config_test.yaml --step1 --step2
 ```
