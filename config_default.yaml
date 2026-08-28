@@ -1,0 +1,67 @@
+########################################################################### 
+##### General #############################################################
+###########################################################################
+
+# Step 1 is run in batches of *batch_size* size (default=200). 
+# To run all batches, keep *batch_first=1* and *batch_last=-1*
+# You may change these values to run Step 1 for other choices
+# The default *n_threads=null* allows allocating as many threads as available
+batch_size: 200
+batch_first: 1
+batch_last: -1 #the last batch
+n_threads: null
+
+########################################################################### 
+##### Paths ###############################################################
+###########################################################################
+
+# library_path : path to the .vcf or .bed library with TE coordinates, sequence, and family in the reference genome
+# ids_path: path to the list of accessions names to process (one-column .csv file) - the pipeline will be run for these and only these accessions
+# gene_path: path to the folder with the gene annotations
+# seq_path: path to the folder with genome sequences of the accessions
+# out_path: path to save the outputs
+
+# gene_ref_path: path to the folder with the gene annotation for the reference genome [provided for tair10 in sources foulder]
+# seq_ref_path: path to the folder with genome sequence of the reference genome [provided for tair10 in sources foulder]
+# peri_path: path to the folder with the coordinates of the pericentromeres in the reference genome [provided for tair10 in sources foulder]
+
+library_path: /library.vcf
+ids_path: /genome_ids_list.csv
+gene_path: /gene_folder/
+seq_path: /sequences_folder
+out_path: /out_path
+
+gene_ref_path: './sources/Araport11_GFF3_genes_transposons.Feb2022.gff'
+seq_ref_path: './sources/TAIR10_allChr.fasta'
+peri_path: './sources/TAIR10_pericentromeres.bed'
+
+########################################################################### 
+##### Formats #############################################################
+###########################################################################
+
+# library_format : 'graffite' or 'bed'
+# gene_suffix : suffix used in the names of gene annotations after $genome name (ex., _LiftOver.TAIR10_genes.bed)
+# gene_format : gene annotation file format : ['liftoff', 'ensembl', 'bed10']
+# seq_suffix : suffix used in the names of sequence files after $genome name (ex., .scaffold.fasta)
+library_format: bed
+gene_suffix: suffix_after_genome_id.bed
+gene_format: bed10
+seq_suffix: suffix_after_genome_id.fasta
+
+########################################################################### 
+##### Step 2 ##############################################################
+###########################################################################
+
+#returnTE : if to return the list of TEs in one file per genome 
+#returnFlanks : if to return the list of joint flanks (corresponding to confirmed absences of TEs) in one file per genome 
+returnTE: true
+returnFlanks: true
+
+########################################################################### 
+##### Step 3 / 4 ##########################################################
+###########################################################################
+
+# meth_path : path to the folder with methylation annotations
+# threads : number of threads to use (default=20)
+meth_path: /methylation_folder
+threads: 20
