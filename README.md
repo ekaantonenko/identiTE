@@ -12,6 +12,7 @@ conda create -n bioenv python=3.11
 conda activate bioenv
 conda install -c conda-forge -c bioconda pybedtools biopython=1.79 pandas
 conda install -c bioconda blast
+conda install pandas
 conda install yq
 conda install -c conda-forge jq
 ```
