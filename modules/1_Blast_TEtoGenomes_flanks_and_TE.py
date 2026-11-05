@@ -43,32 +43,30 @@ def load_one_genome(idx, seq_path, seq_suffix):
 # =========================
 # REMOVE PERICENTROMERES
 # =========================
-def removePeri(df, PERI, 
-                chr_col='CHROM',
-                start_col='POS',
-                end_col='POS'
-                ):
-    dfs_noperi = []
+def removePeri(df, PERI,
+               chr_col='CHROM', start_col='POS', end_col='POS',
+               peri_chr='Chr', peri_start='start', peri_end='end',
+               keep_unlisted=True):
+    """Remove rows of df that overlap any region in PERI.
 
-    ### Chromosomes 1, 2, 3, 5 ###
-    for i in [0,1,2,5]:
-        tmp = df[(df[chr_col] == PERI.loc[i,'Chr']) & 
-                ((df[end_col] < PERI.loc[i,'start']) | 
-                 (df[start_col] > PERI.loc[i,'end']))]
-        dfs_noperi.append(tmp)
+    Works with any chromosome names and any number of regions per chromosome.
+    keep_unlisted: if True (original behaviour), rows on chromosomes absent
+                   from PERI are kept; if False, they are dropped.
+    """
+    chrom = df[chr_col].to_numpy()
+    start = df[start_col].to_numpy()
+    end   = df[end_col].to_numpy()
 
-    ### Chromosome 4 (as pericentromeres consist of two regions) ###
-    tmp = df[(df[chr_col] == 'Chr4') & 
-            ((df[end_col] < PERI.loc[3,'start']) | # up- from the 1st part
-             (df[start_col] > PERI.loc[4,'end']) | # down- from the 2nd part
-            ((df[start_col] > PERI.loc[3,'end']) & 
-              (df[end_col] < PERI.loc[4,'start'])) #between the 1st and 2nd parts
-            )]
-    dfs_noperi.append(tmp)
-        
-    df_noperi = pd.concat(dfs_noperi)
-    #df_noperi = df_noperi.sort_values(by=['Chr', start_col, 'end_ref'])
-    return df_noperi
+    in_peri = np.zeros(len(df), dtype=bool)
+    for c, s, e in PERI[[peri_chr, peri_start, peri_end]].itertuples(index=False):
+        in_peri = in_peri | ((chrom == c) & (end >= s) & (start <= e))
+
+
+    keep = ~in_peri
+    if not keep_unlisted:
+        keep = keep & np.isin(chrom, PERI[peri_chr].unique())
+
+    return df[keep]
 
 # =========================
 # REF GENES RETRIEVAL
@@ -80,16 +78,7 @@ def get_ref_genes():
     global _ref_genes_cache
     with _ref_lock:
         if _ref_genes_cache is None:
-            genes = pd.read_csv(gene_ref_path, sep='\t', skiprows=1,
-                                header=None, encoding='cp1252')
-            genes = genes[genes[2] == 'gene']
-            genes = genes[genes[0].isin(['Chr1', 'Chr2', 'Chr3', 'Chr4', 'Chr5'])]
-            genes = genes[[0,3,4,6,8]]
-            genes.columns = ['Chr', 'start', 'end', 'strand', 'id']
-            genes[['start', 'end']] = genes[['start', 'end']].astype(int)
-            genes['id'] = genes['id'].str.split(';').str[0].str.lstrip('ID=')
-            genes = genes.sort_values(by=['Chr', 'start', 'end'])
-            _ref_genes_cache = genes
+            _ref_genes_cache = load_gene_gff(gene_ref_path, format='liftoff')
     return _ref_genes_cache
 
 # =========================
@@ -140,7 +129,8 @@ BLAST_COLS = ['query', 'subject', 'pc_identity', 'aln_length', 'mismatches',
               'gaps_opened', 'query_start', 'query_end', 'subject_start',
               'subject_end', 'e_value', 'bitscore']
 
-RESULT_SUFFIXES = ['btwgenes_pc_identity', 'btwgenes_start', 'btwgenes_end',
+RESULT_SUFFIXES = ['chr',
+                   'btwgenes_pc_identity', 'btwgenes_start', 'btwgenes_end',
                    'left_pc_identity', 'left_start', 'left_end',
                    'right_pc_identity', 'right_start', 'right_end',
                    'btwflanks_pc_identity', 'btwflanks_start', 'btwflanks_end']
@@ -162,12 +152,34 @@ def process_one_genome(idx, i, row, genes_t, leftflank, rightflank, TE,
     if matched.empty:
         return local_results
 
-    left  = matched['start_ref'].min()
-    right = matched['end_ref'].max()
-    subseq = genome_cache[idx][row['Chr']]
+    counts = matched['Chr'].value_counts()
+    counts = counts[counts >= 2]
+    if counts.empty:
+        return local_results
+
+    best = counts[counts == counts.max()].index
+    if len(best) > 1:
+        # Tie: keep the chromosome where the genes are closest together
+        spans = (matched[matched['Chr'].isin(best)]
+                 .groupby('Chr')
+                 .apply(lambda g: g['end_ref'].max() - g['start_ref'].min()))
+        q_chr = spans.idxmin()
+    else:
+        q_chr = best[0]
+
+    if q_chr not in genome_cache[idx]:
+        return local_results
+
+    matched = matched[matched['Chr'] == q_chr]
+    left  = int(matched['start_ref'].min())
+    right = int(matched['end_ref'].max())
+    subseq = genome_cache[idx][q_chr]
     subseq_between_genes = subseq[left:right+1]
+
     if not subseq_between_genes:
         return local_results
+
+    local_results[f'{idx}_chr'] = q_chr
 
     path_db       = f'{out_path}/blast/TE_db_{worker_id}_{idx}_{i}.fsa'
     path_combined = f'{out_path}/blast/combined_{worker_id}_{idx}_{i}.fa'
@@ -444,10 +456,6 @@ if __name__ == "__main__":
     print(f"Loading and removing pericentromeres... : {str(datetime.datetime.now())}")
     PERI = load_pericentromeres(peri_path, format='bed3')
     print('Length of library before:', len(library_full))
-    """removing extra (C, M) chromosomes"""
-    #library_full = library_full[library_full['CHROM'].isin([f'Chr{i}' for i in range(1,6)])]
-    library_full = library_full[~library_full['CHROM'].isin([f'Chr{i}' for i in ['C', 'M']])]
-    """removing pericentromeric regions"""
     library_full = removePeri(library_full, PERI) if library_format=='graffite' else removePeri(library_full, PERI,
                                                                                                 chr_col='CHROM',
                                                                                                 start_col='start_ref',

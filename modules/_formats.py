@@ -102,7 +102,6 @@ def read_fasta(path):
     """
     Read FASTA into {header: sequence} dict.
     Handles both single-line and multi-line (wrapped) sequences.
-    Strips '_RagTag' suffix from chromosome names.
     Skips sequences whose names start with 'contig'.
     """
     seqs, header, chunks = {}, None, []
@@ -114,7 +113,7 @@ def read_fasta(path):
             if line.startswith('>'):
                 if header is not None and header is not False:
                     seqs[header] = ''.join(chunks)
-                name = line[1:].split()[0].removesuffix('_RagTag')
+                name = line[1:].split()[0]
                 header = False if name.startswith('contig') else name
                 chunks = []
             else:
@@ -149,11 +148,16 @@ def load_gene_gff(path, format='liftoff'):
 
 
 def _load_gene_gff_liftoff(path):
-    gff = pd.read_csv(path, sep='\t', skiprows=3, header=None, encoding='cp1252')
+    gff = pd.read_csv(path, sep='\t', comment='#', header=None, encoding='cp1252')
     gff = gff[gff[2] == 'gene'][[0, 3, 4, 6, 8]]
     gff.columns = ['Chr', 'start_ref', 'end_ref', 'strand', 'id']
-    gff['id'] = gff['id'].str.split(';').map(lambda d: d[0]).str.lstrip('ID=')
+    gff['id'] = gff['id'].str.split(';').map(
+        lambda fields: next(
+            (f.split('=', 1)[1].split('.')[0] for f in fields
+            if f.startswith(('Name=', 'standard_name='))),
+            None))
     gff[['start_ref', 'end_ref']] = gff[['start_ref', 'end_ref']].astype(int)
+    gff = gff.sort_values(by=['Chr', 'start_ref', 'end_ref'])
     return gff.reset_index(drop=True)
 
 
@@ -165,6 +169,7 @@ def _load_gene_gff_ensembl(path):
     gff['id'] = (gff['id'].str.extract(r'ID=([^;]+)')[0]
                            .str.removeprefix('gene:'))
     gff[['start_ref', 'end_ref']] = gff[['start_ref', 'end_ref']].astype(int)
+    gff = gff.sort_values(by=['Chr', 'start_ref', 'end_ref'])
     return gff.reset_index(drop=True)
 
 
@@ -172,11 +177,15 @@ def _load_gene_bed10(path):
     """BED10 format: chr, start, end, type_n, *, strand, method, type, **, id."""
     bed = pd.read_csv(path, sep='\t', header=None,
                       names=['Chr', 'start_ref', 'end_ref', 'type_n', '*', 'strand', 'method', 'type', '**', 'id'])
-    bed['Chr'] = bed['Chr'].str.rstrip('_RagTag')
     bed = bed[bed['type'] == 'gene']
     bed = bed[['Chr', 'start_ref', 'end_ref', 'strand', 'id']]
-    bed['id'] = bed['id'].str.split(';').map(lambda d: d[0]).str.lstrip('ID=')
+    bed['id'] = bed['id'].str.split(';').map(
+        lambda fields: next(
+            (f.split('=', 1)[1].split('.')[0] for f in fields
+            if f.startswith(('Name=', 'standard_name='))),
+            None))
     bed[['start_ref', 'end_ref']] = bed[['start_ref', 'end_ref']].astype(int)
+    bed = bed.sort_values(by=['Chr', 'start_ref', 'end_ref'])
     return bed.reset_index(drop=True)
 
 
